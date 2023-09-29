@@ -244,6 +244,39 @@ func TestOperatorPrecedenceParsing(t *testing.T) {
 			"3 + 4 * 5 == 3 * 1 + 4 * 5",
 			"((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))",
 		},
+
+		{
+			"true",
+			"true",
+		},
+		{
+			"false",
+			"false",
+		},
+		{
+			"3 > 5 == false",
+			"((3 > 5) == false)",
+		},
+		{
+			"3 < 5 == true",
+			"((3 < 5) == true)",
+		},
+		{
+			"(5 + 5) * 2",
+			"((5 + 5) * 2)",
+		},
+		{
+			"2 / (5 + 5)",
+			"(2 / (5 + 5))",
+		},
+		{
+			"-(5 + 5)",
+			"(-(5 + 5))",
+		},
+		{
+			"!(true == true)",
+			"(!(true == true))",
+		},
 	}
 	for _, tt := range tests {
 		l := lexer.New(tt.input)
@@ -307,4 +340,58 @@ func testInfixExpression(t *testing.T, exp ast.Expression, left interface{},
 		return false
 	}
 	return true
+}
+
+func testBooleanExpression(t *testing.T, exp ast.Expression, value bool) {
+	token, ok := exp.(*ast.BooleanExpression)
+	if !ok {
+		t.Errorf("exp is not ast.BooleanExpression . got %T", exp)
+	}
+	if token.Value != value {
+
+		t.Error("token.Value not", value, "got = ", token.Value)
+	}
+
+	if token.TokenLiteral() != fmt.Sprintf("%t", value) {
+
+		t.Error("token.TokenLiteral() not", value, "got = ", token.TokenLiteral())
+	}
+
+}
+
+func TestIfExpression(t *testing.T) {
+	input := `if (x < y) { x } else  {d}`
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+	if len(program.Statements) != 1 {
+		t.Fatalf("program.Body does not contain %d statements. got=%d\n",
+			1, len(program.Statements))
+	}
+	stmt, ok := program.Statements[0].(*ast.ExpressionStatement)
+	if !ok {
+		t.Fatalf("program.Statements[0] is not ast.ExpressionStatement. got=%T",
+			program.Statements[0])
+	}
+	exp, ok := stmt.Expression.(*ast.IfExpression)
+	if !ok {
+		t.Fatalf("stmt.Expression is not ast.IfExpression. got=%T",
+			stmt.Expression)
+	}
+	if !testInfixExpression(t, exp.Condition, "x", "<", "y") {
+		return
+	}
+	if len(exp.Consequence.Statements) != 1 {
+		t.Errorf("consequence is not 1 statements. got=%d\n",
+			len(exp.Consequence.Statements))
+	}
+	consequence, ok := exp.Consequence.Statements[0].(*ast.ExpressionStatement)
+	if !ok {
+		t.Fatalf("Statements[0] is not ast.ExpressionStatement. got=%T",
+			exp.Consequence.Statements[0])
+	}
+	if !testIdentifier(t, consequence.Expression, "x") {
+		return
+	}
 }

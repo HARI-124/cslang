@@ -63,6 +63,10 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefixFn(token.INT, p.parseIntegerLiteral)
 	p.registerPrefixFn(token.BANG, p.parsePrefixExpression)
 	p.registerPrefixFn(token.MINUS, p.parsePrefixExpression)
+	p.registerPrefixFn(token.TRUE, p.ParseBooleanExpression)
+	p.registerPrefixFn(token.FALSE, p.ParseBooleanExpression)
+	p.registerPrefixFn(token.LPAREN, p.ParseGroupedExpression)
+	p.registerPrefixFn(token.IF, p.parseIfExpression)
 	p.registerInfix(token.PLUS, p.parseInfixExpression)
 	p.registerInfix(token.MINUS, p.parseInfixExpression)
 	p.registerInfix(token.SLASH, p.parseInfixExpression)
@@ -268,4 +272,80 @@ func (p *Parser) parseInfixExpression(left ast.Expression) ast.Expression {
 	expression.Right = p.parseExpression(precedence)
 
 	return expression
+}
+
+func (p *Parser) ParseBooleanExpression() ast.Expression {
+	return &ast.BooleanExpression{Token: p.curToken, Value: p.curTokenIs(token.TRUE)}
+}
+
+func (p *Parser) ParseGroupedExpression() ast.Expression {
+	p.nextToken()
+
+	exp := p.parseExpression(LOWEST)
+	if !p.expectPeek(token.RPAREN) {
+		return nil
+	}
+	return exp
+}
+
+func (p *Parser) parseIfExpression() ast.Expression {
+	exp := &ast.IfExpression{Token: p.curToken}
+
+	if !p.expectPeek(token.LPAREN) {
+		msg := fmt.Sprintf("parser error  : expected %s after if token", token.LPAREN)
+		p.errors = append(p.errors, msg)
+		return nil
+	}
+	p.nextToken()
+	condition := p.parseExpression(LOWEST)
+
+	exp.Condition = condition
+
+	if !p.expectPeek(token.RPAREN) {
+
+		msg := fmt.Sprintf("parser error  : expected %s after condition expression", token.RPAREN)
+		p.errors = append(p.errors, msg)
+		return nil
+	}
+
+	if !p.expectPeek(token.LBRACE) {
+
+		msg := fmt.Sprintf("parser error  : expected %s after condition expression", token.LBRACE)
+		p.errors = append(p.errors, msg)
+		return nil
+	}
+
+	exp.Consequence = p.parseBlockStatement()
+
+	if p.peekTokenIs(token.ELSE) {
+		p.nextToken()
+
+		if !p.expectPeek(token.LBRACE) {
+
+			msg := fmt.Sprintf("parser error  : expected %s after else keyword", token.LBRACE)
+			p.errors = append(p.errors, msg)
+			return nil
+		}
+
+		exp.Alternative = p.parseBlockStatement()
+	}
+
+	return exp
+}
+
+func (p *Parser) parseBlockStatement() *ast.BlockStatement {
+	block := &ast.BlockStatement{Token: p.curToken}
+	block.Statements = []ast.Statement{}
+
+	p.nextToken()
+
+	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
+		stmt := p.parseStatement()
+		if stmt != nil {
+			block.Statements = append(block.Statements, stmt)
+		}
+		p.nextToken()
+	}
+
+	return block
 }
